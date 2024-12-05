@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner for Counting Items</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <style>
+        video, canvas {
+            width: 100%;
+            max-width: 700px;
+            display: block;
+            margin: 10px auto;
+        }
+        #object-info {
+            text-align: center;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+        }
+        #counter {
+            font-size: 20px;
+            font-weight: bold;
+            color: #007BFF;
+        }
+        h1 {
+            text-align: center;
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <h1>Scanner for Counting Items</h1>
+    <video id="live-camera" autoplay playsinline muted></video>
+    <canvas id="output-canvas"></canvas>
+    <div id="object-info">
+        <p>Detected Objects:</p>
+        <p id="counter">0</p>
+        <div id="detected-list"></div>
+    </div>
+
+    <script>
+        const video = document.getElementById('live-camera');
+        const canvas = document.getElementById('output-canvas');
+        const ctx = canvas.getContext('2d');
+        const counter = document.getElementById('counter');
+        const detectedList = document.getElementById('detected-list');
+
+        let model;
+
+        async function startApp() {
+            try {
+                // Load the pre-trained COCO-SSD model
+                model = await cocoSsd.load();
+                console.log('Model loaded.');
+
+                // Start the camera stream
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+
+                video.addEventListener('loadeddata', () => {
+                    detectObjects();
+                });
+            } catch (error) {
+                console.error('Error initializing app:', error);
+            }
+        }
+
+        async function detectObjects() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Perform object detection
+            const predictions = await model.detect(canvas);
+            drawPredictions(predictions);
+
+            // Update detected objects info
+            updateDetectedObjects(predictions);
+
+            requestAnimationFrame(detectObjects);
+        }
+
+        function drawPredictions(predictions) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            predictions.forEach(prediction => {
+                const [x, y, width, height] = prediction.bbox;
+                ctx.strokeStyle = '#00FF00';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, y, width, height);
+
+                ctx.fillStyle = '#00FF00';
+                ctx.font = '18px Arial';
+                ctx.fillText(`${prediction.class} (${(prediction.score * 100).toFixed(1)}%)`, x, y > 10 ? y - 10 : y + 10);
+            });
+        }
+
+        function updateDetectedObjects(predictions) {
+            const objectCounts = {};
+
+            predictions.forEach(prediction => {
+                const objectName = prediction.class;
+                if (objectCounts[objectName]) {
+                    objectCounts[objectName]++;
+                } else {
+                    objectCounts[objectName] = 1;
+                }
+            });
+
+            detectedList.innerHTML = '';
+            Object.entries(objectCounts).forEach(([objectName, count]) => {
+                const item = document.createElement('p');
+                item.textContent = `${objectName}: ${count}`;
+                detectedList.appendChild(item);
+            });
+
+            counter.textContent = predictions.length;
+        }
+
+        startApp();
+    </script>
+</body>
+</html>
